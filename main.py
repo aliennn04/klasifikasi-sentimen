@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import re
-
+from wordcloud import WordCloud
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -237,3 +237,181 @@ for bar in bars:
 
 plt.tight_layout()
 plt.show()
+
+# =====================================
+# SIMPAN HASIL PERBANDINGAN
+# =====================================
+
+hasil.to_csv(
+    "hasil_perbandingan.csv",
+    index=False,
+    encoding="utf-8-sig"
+)
+
+# =====================================
+# WORD CLOUD SEMUA ULASAN
+# =====================================
+
+print("\n" + "=" * 50)
+print("WORD CLOUD")
+print("=" * 50)
+
+text_semua = " ".join(data["text"].astype(str))
+
+wc_semua = WordCloud(
+    width=1200,
+    height=600,
+    background_color="white",
+    max_words=200
+).generate(text_semua)
+
+plt.figure(figsize=(12,6))
+plt.imshow(wc_semua, interpolation="bilinear")
+plt.axis("off")
+plt.title("Word Cloud Seluruh Ulasan WhatsApp")
+plt.tight_layout()
+plt.show()
+
+wc_semua.to_file("wordcloud_semua.png")
+
+# =====================================
+# WORD CLOUD POSITIF
+# =====================================
+
+text_pos = " ".join(
+    data[data["label"] == "positif"]["text"]
+    .astype(str)
+)
+
+wc_pos = WordCloud(
+    width=1200,
+    height=600,
+    background_color="white",
+    max_words=200
+).generate(text_pos)
+
+plt.figure(figsize=(12,6))
+plt.imshow(wc_pos, interpolation="bilinear")
+plt.axis("off")
+plt.title("Word Cloud Sentimen Positif")
+plt.tight_layout()
+plt.show()
+
+wc_pos.to_file("wordcloud_positif.png")
+
+# =====================================
+# WORD CLOUD NEGATIF
+# =====================================
+
+text_neg = " ".join(
+    data[data["label"] == "negatif"]["text"]
+    .astype(str)
+)
+
+wc_neg = WordCloud(
+    width=1200,
+    height=600,
+    background_color="white",
+    max_words=200
+).generate(text_neg)
+
+plt.figure(figsize=(12,6))
+plt.imshow(wc_neg, interpolation="bilinear")
+plt.axis("off")
+plt.title("Word Cloud Sentimen Negatif")
+plt.tight_layout()
+plt.show()
+
+wc_neg.to_file("wordcloud_negatif.png")
+
+print("\nWord Cloud berhasil disimpan:")
+print("wordcloud_semua.png")
+print("wordcloud_positif.png")
+print("wordcloud_negatif.png")
+
+# =====================================
+# CONFUSION MATRIX VISUAL NB
+# =====================================
+
+cm_nb = confusion_matrix(y_test, pred_nb)
+
+plt.figure(figsize=(6,5))
+plt.imshow(cm_nb)
+
+plt.title("Confusion Matrix Naive Bayes")
+plt.colorbar()
+
+plt.xticks([0,1], ["Negatif","Positif"])
+plt.yticks([0,1], ["Negatif","Positif"])
+
+for i in range(cm_nb.shape[0]):
+    for j in range(cm_nb.shape[1]):
+        plt.text(
+            j,
+            i,
+            cm_nb[i,j],
+            ha="center",
+            va="center"
+        )
+
+plt.xlabel("Prediksi")
+plt.ylabel("Aktual")
+plt.tight_layout()
+plt.show()
+
+# =====================================
+# CONFUSION MATRIX VISUAL RF
+# =====================================
+
+cm_rf = confusion_matrix(y_test, pred_rf)
+
+plt.figure(figsize=(6,5))
+plt.imshow(cm_rf)
+
+plt.title("Confusion Matrix Random Forest")
+plt.colorbar()
+
+plt.xticks([0,1], ["Negatif","Positif"])
+plt.yticks([0,1], ["Negatif","Positif"])
+
+for i in range(cm_rf.shape[0]):
+    for j in range(cm_rf.shape[1]):
+        plt.text(
+            j,
+            i,
+            cm_rf[i,j],
+            ha="center",
+            va="center"
+        )
+
+plt.xlabel("Prediksi")
+plt.ylabel("Aktual")
+plt.tight_layout()
+plt.show()
+
+# =====================================
+# GRAFIK PERBANDINGAN SEMUA METRIK
+# =====================================
+
+hasil_plot = hasil.set_index("Metode")
+
+hasil_plot.plot(
+    kind="bar",
+    figsize=(10,6)
+)
+
+plt.title(
+    "Perbandingan Naive Bayes dan Random Forest"
+)
+
+plt.ylabel("Nilai")
+plt.xlabel("Metode")
+
+plt.ylim(0,1)
+
+plt.legend(loc="lower right")
+
+plt.tight_layout()
+plt.show()
+
+print("TEST WORD CLOUD")

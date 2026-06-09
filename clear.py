@@ -1,131 +1,335 @@
 import pandas as pd
 import re
+import json
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 
-# =========================
-# MEMBACA DATASET
-# =========================
+# =====================================================
+# 1. MEMBACA DATASET
+# =====================================================
+
 df = pd.read_csv("whatsapp.csv")
 
-# Hapus data kosong
-df = df.dropna(subset=['content'])
+# Sesuaikan nama kolom
+# Jika dataset Anda menggunakan kolom text
+df = df.dropna(subset=['text'])
 
-# =========================
-# 1. CASE FOLDING
-# =========================
-df['content'] = df['content'].astype(str).str.lower()
+# =====================================================
+# 2. MEMBACA KAMUS NORMALISASI
+# =====================================================
 
-# =========================
-# 2. CLEANING
-# =========================
+with open(
+    "combined_slang_words.txt",
+    "r",
+    encoding="utf-8"
+) as f:
+
+    normalisasi_dict = json.load(f)
+
+print("Jumlah kata slang :", len(normalisasi_dict))
+
+# =====================================================
+# 3. MEMBACA STOPWORD
+# =====================================================
+
+with open(
+    "combined_stop_words.txt",
+    "r",
+    encoding="utf-8"
+) as f:
+
+    stopwords = set(
+        line.strip()
+        for line in f
+        if line.strip()
+    )
+
+print("Jumlah stopword :", len(stopwords))
+
+# =====================================================
+# 4. MEMBACA LEXICON INSET
+# =====================================================
+
+positive = pd.read_csv(
+    "positive.tsv",
+    sep="\t"
+)
+
+negative = pd.read_csv(
+    "negative.tsv",
+    sep="\t"
+)
+
+lexicon = pd.concat(
+    [positive, negative],
+    ignore_index=True
+)
+
+lexicon_dict = dict(
+    zip(
+        lexicon['word'],
+        lexicon['weight']
+    )
+)
+
+print("Jumlah kata positif :", len(positive))
+print("Jumlah kata negatif :", len(negative))
+
+# =====================================================
+# 5. CASE FOLDING
+# =====================================================
+
+df['case_folding'] = (
+    df['text']
+    .astype(str)
+    .str.lower()
+)
+
+# =====================================================
+# 6. CLEANING
+# =====================================================
+
 def cleaning(text):
-    # Hapus URL
-    text = re.sub(r'http\S+|www\S+|https\S+', '', text)
 
-    # Hapus mention dan hashtag
-    text = re.sub(r'@\w+', '', text)
-    text = re.sub(r'#\w+', '', text)
+    # hapus URL
+    text = re.sub(
+        r'http\S+|www\S+|https\S+',
+        '',
+        text
+    )
 
-    # Hapus angka
-    text = re.sub(r'\d+', '', text)
+    # hapus mention
+    text = re.sub(
+        r'@\w+',
+        '',
+        text
+    )
 
-    # Hapus tanda baca dan karakter khusus
-    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    # hapus hashtag
+    text = re.sub(
+        r'#\w+',
+        '',
+        text
+    )
 
-    # Hapus spasi berlebih
-    text = re.sub(r'\s+', ' ', text).strip()
+    # hapus angka
+    text = re.sub(
+        r'\d+',
+        '',
+        text
+    )
+
+    # hapus simbol
+    text = re.sub(
+        r'[^a-zA-Z\s]',
+        ' ',
+        text
+    )
+
+    # hapus spasi berlebih
+    text = re.sub(
+        r'\s+',
+        ' ',
+        text
+    ).strip()
 
     return text
 
-df['content'] = df['content'].apply(cleaning)
+df['cleaning'] = (
+    df['case_folding']
+    .apply(cleaning)
+)
 
-# =========================
-# 3. TOKENIZING
-# =========================
+# =====================================================
+# 7. TOKENIZING
+# =====================================================
+
 def tokenizing(text):
     return text.split()
 
-df['tokens'] = df['content'].apply(tokenizing)
+df['tokenizing'] = (
+    df['cleaning']
+    .apply(tokenizing)
+)
 
-# =========================
-# 4. STOPWORD REMOVAL
-# =========================
-factory_stopword = StopWordRemoverFactory()
-stopwords = set(factory_stopword.get_stop_words())
+# =====================================================
+# 8. NORMALISASI
+# =====================================================
 
-def remove_stopwords(tokens):
-    return [word for word in tokens if word not in stopwords]
+def normalize(tokens):
 
-df['tokens'] = df['tokens'].apply(remove_stopwords)
+    return [
+        normalisasi_dict.get(
+            word,
+            word
+        )
+        for word in tokens
+    ]
 
-# =========================
-# 5. STEMMING
-# =========================
-factory_stemmer = StemmerFactory()
-stemmer = factory_stemmer.create_stemmer()
+df['normalisasi'] = (
+    df['tokenizing']
+    .apply(normalize)
+)
+
+# =====================================================
+# 9. STOPWORD REMOVAL
+# =====================================================
+
+def remove_stopword(tokens):
+
+    return [
+        word
+        for word in tokens
+        if word not in stopwords
+    ]
+
+df['stopword'] = (
+    df['normalisasi']
+    .apply(remove_stopword)
+)
+
+# =====================================================
+# 10. STEMMING
+# =====================================================
+
+factory = StemmerFactory()
+stemmer = factory.create_stemmer()
 
 def stemming(tokens):
-    return [stemmer.stem(word) for word in tokens]
 
-df['tokens'] = df['tokens'].apply(stemming)
+    return [
+        stemmer.stem(word)
+        for word in tokens
+    ]
 
-# Gabungkan token menjadi kalimat kembali
-df['content_bersih'] = df['tokens'].apply(lambda x: ' '.join(x))
+df['stemming'] = (
+    df['stopword']
+    .apply(stemming)
+)
 
-# =========================
-# KAMUS SENTIMEN
-# =========================
-kata_positif = [
-    'bagus', 'baik', 'mantap', 'cepat', 'mudah',
-    'bantu', 'suka', 'keren', 'baik',
-    'puas', 'guna', 'hebat', 'terbaik'
-]
+# =====================================================
+# 11. GABUNGKAN KATA
+# =====================================================
 
-kata_negatif = [
-    'buruk', 'jelek', 'error', 'lambat', 'gagal',
-    'bug', 'rusak', 'kecewa', 'parah',
-    'lemot', 'ganggu', 'masalah'
-]
+df['content_bersih'] = (
+    df['stemming']
+    .apply(lambda x: ' '.join(x))
+)
 
-# =========================
-# PELABELAN SENTIMEN
-# =========================
-def label_sentimen(text):
-    positif = 0
-    negatif = 0
+# =====================================================
+# 12. HITUNG SKOR SENTIMEN
+# =====================================================
+
+def sentiment_score(text):
+
+    score = 0
 
     words = text.split()
 
     for word in words:
-        if word in kata_positif:
-            positif += 1
 
-        if word in kata_negatif:
-            negatif += 1
+        if word in lexicon_dict:
+            score += lexicon_dict[word]
 
-    if positif > negatif:
+    return score
+
+df['score_sentimen'] = (
+    df['content_bersih']
+    .apply(sentiment_score)
+)
+
+# =====================================================
+# 13. LABEL SENTIMEN
+# =====================================================
+
+def sentiment_label(score):
+
+    if score > 0:
         return "Positif"
-    elif negatif > positif:
+
+    elif score < 0:
         return "Negatif"
+
     else:
         return "Netral"
 
-df['sentimen'] = df['content_bersih'].apply(label_sentimen)
+df['sentimen'] = (
+    df['score_sentimen']
+    .apply(sentiment_label)
+)
 
-# Hapus data netral jika hanya ingin 2 kelas
-df = df[df['sentimen'] != 'Netral']
+# =====================================================
+# 14. DATASET 2 KELAS
+# =====================================================
 
-# =========================
-# SIMPAN HASIL
-# =========================
-df.to_csv("dataset_berlabel.csv", index=False)
+df_2kelas = df[
+    df['sentimen'] != 'Netral'
+]
 
-# =========================
-# HASIL
-# =========================
+# =====================================================
+# 15. SIMPAN DATASET
+# =====================================================
+
+df.to_csv(
+    "dataset_label_lengkap.csv",
+    index=False,
+    encoding="utf-8-sig"
+)
+
+df_2kelas.to_csv(
+    "dataset_label_2kelas.csv",
+    index=False,
+    encoding="utf-8-sig"
+)
+
+# =====================================================
+# 16. DISTRIBUSI SENTIMEN
+# =====================================================
+
 print("\nDistribusi Sentimen:")
-print(df['sentimen'].value_counts())
+
+print(
+    df['sentimen']
+    .value_counts()
+)
+
+print("\nDistribusi Sentimen 2 Kelas:")
+
+print(
+    df_2kelas['sentimen']
+    .value_counts()
+)
+
+# =====================================================
+# 17. CONTOH HASIL
+# =====================================================
 
 print("\nContoh Hasil:")
-print(df[['content', 'content_bersih', 'sentimen']].head())
+
+print(
+    df[
+        [
+            'text',
+            'content_bersih',
+            'score_sentimen',
+            'sentimen'
+        ]
+    ]
+    .head(10)
+)
+
+# =====================================================
+# 18. CEK NORMALISASI
+# =====================================================
+
+print("\nContoh Normalisasi:")
+
+for i in range(min(10, len(df))):
+
+    print("\nAsli       :", df['cleaning'].iloc[i])
+
+    print(
+        "Normalisasi:",
+        " ".join(
+            df['normalisasi'].iloc[i]
+        )
+    )
